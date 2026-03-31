@@ -15,20 +15,20 @@ def write_case(path: Path, M: int, N: int, K: int, A: list[float], B: list[float
     with path.open("w", encoding="utf-8") as f:
         f.write(f"{M} {N} {K}\n")
         for row in range(M):
-            start = row * K
-            values = " ".join(f"{value:.6f}" for value in A[start : start + K])
+            start = row * N
+            values = " ".join(f"{value:.6f}" for value in A[start : start + N])
             f.write(values + "\n")
         f.write("\n")
-        for row in range(K):
-            start = row * N
-            values = " ".join(f"{value:.6f}" for value in B[start : start + N])
+        for row in range(N):
+            start = row * K
+            values = " ".join(f"{value:.6f}" for value in B[start : start + K])
             f.write(values + "\n")
 
 
 def random_case(out_dir: Path, name: str, M: int, N: int, K: int, seed: int) -> None:
     rng = random.Random(seed)
-    A = [rng.uniform(-3.0, 3.0) for _ in range(M * K)]
-    B = [rng.uniform(-3.0, 3.0) for _ in range(K * N)]
+    A = [rng.uniform(-3.0, 3.0) for _ in range(M * N)]
+    B = [rng.uniform(-3.0, 3.0) for _ in range(N * K)]
     write_case(out_dir / f"{name}.txt", M, N, K, A, B)
 
 
@@ -60,8 +60,6 @@ def main() -> None:
             0.5,
             -1.0,
             4.0,
-            -0.5,
-            2.0,
         ],
         [
             2.0,

@@ -48,28 +48,29 @@ struct CompareResult {
 extern "C" void solve(const float* A, const float* B, float* C, int M, int N, int K);
 
 std::vector<float> cpu_reference(const MatrixCase& test_case) {
-    std::vector<float> expected(static_cast<size_t>(test_case.M) * test_case.N, 0.0f);
+    std::vector<float> expected(static_cast<size_t>(test_case.M) * test_case.K, 0.0f);
 
     for (int row = 0; row < test_case.M; ++row) {
-        for (int col = 0; col < test_case.N; ++col) {
+        for (int col = 0; col < test_case.K; ++col) {
             float sum = 0.0f;
-            for (int k = 0; k < test_case.K; ++k) {
-                sum += test_case.A[row * test_case.K + k] * test_case.B[k * test_case.N + col];
+            for (int inner = 0; inner < test_case.N; ++inner) {
+                sum += test_case.A[row * test_case.N + inner] * test_case.B[inner * test_case.K + col];
             }
-            expected[row * test_case.N + col] = sum;
+            expected[row * test_case.K + col] = sum;
         }
     }
 
     return expected;
 }
 
-CompareResult compare_outputs(const std::vector<float>& expected, const std::vector<float>& actual, int M, int N,
+CompareResult compare_outputs(const std::vector<float>& expected, const std::vector<float>& actual, int rows,
+                              int cols,
                               float abs_tol = 1e-4f, float rel_tol = 1e-4f) {
     CompareResult result;
 
-    for (int row = 0; row < M; ++row) {
-        for (int col = 0; col < N; ++col) {
-            const size_t idx = static_cast<size_t>(row) * N + col;
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < cols; ++col) {
+            const size_t idx = static_cast<size_t>(row) * cols + col;
             const float ref = expected[idx];
             const float got = actual[idx];
             const float abs_diff = std::fabs(ref - got);
@@ -107,8 +108,8 @@ MatrixCase load_case_from_file(const fs::path& path) {
         throw std::runtime_error("Invalid matrix shape in: " + path.string());
     }
 
-    test_case.A.resize(static_cast<size_t>(test_case.M) * test_case.K);
-    test_case.B.resize(static_cast<size_t>(test_case.K) * test_case.N);
+    test_case.A.resize(static_cast<size_t>(test_case.M) * test_case.N);
+    test_case.B.resize(static_cast<size_t>(test_case.N) * test_case.K);
 
     for (float& value : test_case.A) {
         if (!(fin >> value)) {
@@ -149,8 +150,8 @@ MatrixCase make_random_case(int case_index, std::mt19937& rng) {
     test_case.M = dim_dist(rng);
     test_case.N = dim_dist(rng);
     test_case.K = dim_dist(rng);
-    test_case.A.resize(static_cast<size_t>(test_case.M) * test_case.K);
-    test_case.B.resize(static_cast<size_t>(test_case.K) * test_case.N);
+    test_case.A.resize(static_cast<size_t>(test_case.M) * test_case.N);
+    test_case.B.resize(static_cast<size_t>(test_case.N) * test_case.K);
 
     for (float& value : test_case.A) {
         value = value_dist(rng);
@@ -181,7 +182,7 @@ fs::path default_test_dir(const char* argv0) {
 
 bool run_case(const MatrixCase& test_case) {
     const std::vector<float> expected = cpu_reference(test_case);
-    std::vector<float> actual(static_cast<size_t>(test_case.M) * test_case.N, 0.0f);
+    std::vector<float> actual(static_cast<size_t>(test_case.M) * test_case.K, 0.0f);
 
     const size_t bytes_a = test_case.A.size() * sizeof(float);
     const size_t bytes_b = test_case.B.size() * sizeof(float);
@@ -214,17 +215,17 @@ bool run_case(const MatrixCase& test_case) {
     CUDA_CHECK(cudaFree(d_b));
     CUDA_CHECK(cudaFree(d_c));
 
-    const CompareResult compare = compare_outputs(expected, actual, test_case.M, test_case.N);
+    const CompareResult compare = compare_outputs(expected, actual, test_case.M, test_case.K);
     if (!compare.ok) {
-        std::cout << "[FAIL] " << test_case.name << " shape=(" << test_case.M << ", " << test_case.N << ", "
-                  << test_case.K << ") first mismatch at (" << compare.row << ", " << compare.col
+        std::cout << "[FAIL] " << test_case.name << " dims=(M=" << test_case.M << ", N=" << test_case.N
+                  << ", K=" << test_case.K << ") first mismatch at (" << compare.row << ", " << compare.col
                   << ") expected=" << compare.expected << " actual=" << compare.actual
                   << " max_abs_diff=" << compare.max_abs_diff << '\n';
         return false;
     }
 
-    std::cout << "[PASS] " << test_case.name << " shape=(" << test_case.M << ", " << test_case.N << ", "
-              << test_case.K << ") max_abs_diff=" << compare.max_abs_diff << '\n';
+    std::cout << "[PASS] " << test_case.name << " dims=(M=" << test_case.M << ", N=" << test_case.N
+              << ", K=" << test_case.K << ") max_abs_diff=" << compare.max_abs_diff << '\n';
     return true;
 }
 

@@ -1,10 +1,10 @@
 # Matrix Multiplication
 
-这里只需要改 `solve.cu`。里面包含你要实现的 `matrix_multiplication_kernel`，以及调用它的 `solve` wrapper。
+这里只需要改 `solve.cu`。当前已经提供了 `solve` wrapper，你只需要实现 `matrix_multiplication_kernel`。
 
 ## 文件说明
 
-- `solve.cu`: 你需要修改的唯一文件，包含 `matrix_multiplication_kernel` 和 `solve` wrapper
+- `solve.cu`: 你需要修改的唯一文件，主要补上 `matrix_multiplication_kernel`
 - `main.cu`: 对拍 runner，包含 CPU 参考实现、固定测试和随机测试
 - `CMakeLists.txt`: 题目目录自己的 CMake 配置
 - `generate_test_data.py`: 生成固定测试数据
@@ -51,6 +51,7 @@ python3 matrix_multiplication/generate_test_data.py
 
 ## 测试逻辑
 
+- 维度约定：`A` 是 `MxN`，`B` 是 `NxK`，输出 `C` 是 `MxK`
 - 固定测试：读取 `testdata` 目录下的 `.txt`
 - 随机测试：运行时按 seed 生成矩阵
 - 参考答案：CPU 上用朴素三重循环计算
