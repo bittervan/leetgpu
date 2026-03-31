@@ -1,0 +1,42 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Generic build outputs
+build/
+build-smoke/
+dist/
+cmake-build-*/
+compile_commands.json
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.log
+
+# CUDA build outputs
+*.ptx
+*.cubin
+*.fatbin
+*.linkinfo
+*.nvvp
+
+# Local binaries
+matrix_multiplication/mm_test
+
+# Generated test data
+matrix_multiplication/testdata/

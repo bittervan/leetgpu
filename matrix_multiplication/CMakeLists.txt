@@ -1,0 +1,56 @@
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(MATRIX_MULTIPLICATION_TARGET matrix_multiplication_runner)
+set(MATRIX_MULTIPLICATION_TESTDATA_DIR ${CMAKE_CURRENT_BINARY_DIR}/testdata)
+set(MATRIX_MULTIPLICATION_TESTDATA_STAMP ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/.generated.stamp)
+set(MATRIX_MULTIPLICATION_TESTDATA_FILES
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_00_sanity_2x3x4.txt
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_01_square_4x4x4.txt
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_02_rect_5x7x3.txt
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_03_odd_17x19x13.txt
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_04_tall_31x9x27.txt
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_05_wide_8x29x11.txt
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_06_block_edge_16x16x16.txt
+    ${MATRIX_MULTIPLICATION_TESTDATA_DIR}/case_07_block_misaligned_33x35x17.txt
+)
+
+add_custom_command(
+    OUTPUT ${MATRIX_MULTIPLICATION_TESTDATA_STAMP}
+    BYPRODUCTS ${MATRIX_MULTIPLICATION_TESTDATA_FILES}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${MATRIX_MULTIPLICATION_TESTDATA_DIR}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/generate_test_data.py --out_dir ${MATRIX_MULTIPLICATION_TESTDATA_DIR}
+    COMMAND ${CMAKE_COMMAND} -E touch ${MATRIX_MULTIPLICATION_TESTDATA_STAMP}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/generate_test_data.py
+    COMMENT "Generating matrix_multiplication test data"
+    VERBATIM
+)
+
+add_custom_target(matrix_multiplication_testdata DEPENDS ${MATRIX_MULTIPLICATION_TESTDATA_STAMP})
+
+add_executable(${MATRIX_MULTIPLICATION_TARGET} main.cu solve.cu)
+set_target_properties(${MATRIX_MULTIPLICATION_TARGET} PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+add_dependencies(${MATRIX_MULTIPLICATION_TARGET} matrix_multiplication_testdata)
+
+add_test(
+    NAME matrix_multiplication_compare
+    COMMAND $<TARGET_FILE:${MATRIX_MULTIPLICATION_TARGET}> --test_dir ${MATRIX_MULTIPLICATION_TESTDATA_DIR}
+)
+set_tests_properties(matrix_multiplication_compare PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+add_custom_target(
+    matrix_multiplication_check
+    COMMAND $<TARGET_FILE:${MATRIX_MULTIPLICATION_TARGET}> --test_dir ${MATRIX_MULTIPLICATION_TESTDATA_DIR}
+    DEPENDS ${MATRIX_MULTIPLICATION_TARGET} matrix_multiplication_testdata
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    USES_TERMINAL
+    COMMENT "Running matrix_multiplication compare"
+)
+
+if(LEETGPU_RUN_CHECK_ON_BUILD)
+    add_custom_target(matrix_multiplication_check_on_build ALL DEPENDS matrix_multiplication_check)
+endif()
