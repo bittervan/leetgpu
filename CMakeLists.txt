@@ -17,7 +17,14 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 enable_testing()
 
 add_subdirectory(matrix_multiplication)
+add_subdirectory(vector_add)
+
+add_custom_target(check)
 
 if(TARGET matrix_multiplication_check)
-    add_custom_target(check DEPENDS matrix_multiplication_check)
+    add_dependencies(check matrix_multiplication_check)
+endif()
+
+if(TARGET vector_add_check)
+    add_dependencies(check vector_add_check)
 endif()
