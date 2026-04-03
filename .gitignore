@@ -40,3 +40,5 @@ matrix_multiplication/mm_test
 
 # Generated test data
 matrix_multiplication/testdata/
+
+.cache

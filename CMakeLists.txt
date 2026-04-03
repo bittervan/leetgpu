@@ -18,6 +18,7 @@ enable_testing()
 
 add_subdirectory(matrix_multiplication)
 add_subdirectory(vector_add)
+add_subdirectory(matrix_transpose)
 
 add_custom_target(check)
 
@@ -27,4 +28,8 @@ endif()
 
 if(TARGET vector_add_check)
     add_dependencies(check vector_add_check)
+endif()
+
+if(TARGET matrix_transpose_check)
+    add_dependencies(check matrix_transpose_check)
 endif()
