@@ -1,7 +1,4 @@
-#include <__clang_cuda_builtin_vars.h>
 #include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
-#include <driver_types.h>
 
 __global__ void reduction_kernel(const float* input, float* output, int N) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
