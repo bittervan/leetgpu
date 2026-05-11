@@ -40,5 +40,6 @@ matrix_multiplication/mm_test
 
 # Generated test data
 matrix_multiplication/testdata/
+softmax_attention/testdata/
 
 .cache
