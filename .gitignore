@@ -43,3 +43,4 @@ matrix_multiplication/testdata/
 softmax_attention/testdata/
 
 .cache
+third_party/
