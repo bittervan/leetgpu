@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <cfloat>
 
 __global__ void matmul_kernel(const float *A, const float *B, float *output, int M, int N, int K) {
     __shared__ float s_A[16][16];
@@ -78,6 +79,56 @@ void transpose(const float *input, float *output, int M, int N) {
     dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x, (M + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
     transpose_kernel<<<blocksPerGrid, threadsPerBlock>>>(input, output, M, N);
+}
+
+float reduction(const float *input, int N) {
+
+}
+
+__global__ void getmax_kernel(const float *input, float *output, int N) {
+    __shared__ float s_data[256];
+    int tx = threadIdx.x;
+    int index = tx + blockIdx.x + blockDim.x;
+
+    if (index < N)
+        s_data[tx] = input[index];
+    else
+        s_data[tx] = -FLT_MAX;
+
+    __syncthreads();
+
+    int current_stride = 128;
+    while (current_stride) {
+        if (tx < current_stride) {
+            s_data[tx] = fmaxf(s_data[tx], s_data[tx + current_stride]);
+        }
+        __syncthreads();
+        current_stride /= 2;
+    }
+
+    output[blockIdx.x] = s_data[0];
+}
+
+float getmax(const float *input, int N) {
+    int threadsPerBlock(256);
+    int blocksPerGrid((N + threadsPerBlock - 1) / threadsPerBlock);
+
+    const float *current_input = input;
+    float *pivot_buffer = nullptr;
+    cudaMalloc(&pivot_buffer, blocksPerGrid * sizeof(float));
+
+    int current_size = N;
+
+    while (current_size > 1) {
+        getmax_kernel<<<blocksPerGrid, threadsPerBlock>>>(current_input, pivot_buffer, current_size);
+        current_size = blocksPerGrid;
+        blocksPerGrid =(current_size + threadsPerBlock - 1) / threadsPerBlock;
+        current_input = pivot_buffer;
+    }
+
+    float ret = 0;
+    cudaMemcpy(&ret, current_input, sizeof(float), cudaMemcpyDeviceToHost);
+    return ret;
 }
 
 // Q, K, V, output are device pointers
