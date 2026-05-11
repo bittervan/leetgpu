@@ -1,5 +1,7 @@
 #include <cuda_runtime.h>
 #include <cfloat>
+#include <cstdio>
+#include <vector>
 
 __global__ void softmax_kernel(const float* input, float* output, int N, float sum) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
@@ -34,7 +36,8 @@ __global__ void getmax_kernel(const float* input, float* output, int N) {
 
 __global__ void elementwise_sub_and_exp_kernel(const float *input, float *output, float max, int N) {
     int index = threadIdx.x + blockIdx.x * blockDim.x;
-    output[index] = expf(input[index] - max);
+    if (index < N)
+        output[index] = expf(input[index] - max);
 }
 
 void getmax(const float* input, float *pivot, float* output, int N, int threadsPerBlock) {
@@ -49,7 +52,7 @@ void getmax(const float* input, float *pivot, float* output, int N, int threadsP
         current_input = pivot;
     }
 
-    cudaMemcpy(output, current_input, sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(output, current_input, sizeof(float), cudaMemcpyDeviceToHost);
 }
 
 void elementwise_sub_and_exp(const float *input, float *output, int N, int threadsPerBlock, float max) {
@@ -98,6 +101,14 @@ float reduction(const float *input, float *pivot, int N, int threadsPerBlock) {
     return ret;
 }
 
+void debug_print_array(const float* to_print, int N) {
+    std::vector<float> h(N);
+    cudaMemcpy(h.data(), to_print, N * sizeof(float), cudaMemcpyDeviceToHost);
+    printf("[");
+    for (int i = 0; i < N; ++i) printf("%f ", h[i]);
+    printf("]\n");
+}
+
 // input, output are device pointers (i.e. pointers to memory on the GPU)
 extern "C" void solve(const float* input, float* output, int N) {
     int threadsPerBlock = 256;
@@ -106,8 +117,12 @@ extern "C" void solve(const float* input, float* output, int N) {
     float* pivot_buffer = nullptr;
     cudaMalloc(&pivot_buffer, N * sizeof(float));
 
+    // printf("Input: "); debug_print_array(input, N);
     float max_val = -FLT_MAX;
     getmax(input, pivot_buffer, &max_val, N, threadsPerBlock);
+    cudaDeviceSynchronize();
+    // printf("Output: "); debug_print_array(pivot_buffer, N);
+    // printf("Max: %f\n", max_val);
 
     elementwise_sub_and_exp(input, output, N, threadsPerBlock, max_val);
 

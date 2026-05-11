@@ -21,6 +21,7 @@ add_subdirectory(image_invert)
 add_subdirectory(matrix_multiplication)
 add_subdirectory(reduction)
 add_subdirectory(softmax)
+add_subdirectory(softmax_attention)
 add_subdirectory(vector_add)
 add_subdirectory(matrix_transpose)
 
@@ -44,6 +45,10 @@ endif()
 
 if(TARGET softmax_check)
     add_dependencies(check softmax_check)
+endif()
+
+if(TARGET softmax_attention_check)
+    add_dependencies(check softmax_attention_check)
 endif()
 
 if(TARGET vector_add_check)
