@@ -81,8 +81,47 @@ void transpose(const float *input, float *output, int M, int N) {
     transpose_kernel<<<blocksPerGrid, threadsPerBlock>>>(input, output, M, N);
 }
 
-float reduction(const float *input, int N) {
+__global__ void reduction_kernel(const float *input, float *output, int N) {
+    __shared__ float s_data[256];
+    int index = threadIdx.x + blockDim.x * blockIdx.x;
+    int tx = threadIdx.x;
+    if (index < N)
+        s_data[tx] = input[index];
+    else
+        s_data[tx] = 0;
 
+    __syncthreads();
+
+    int stride = 128;
+    while (stride) {
+        if (tx < stride) {
+            s_data[tx] += s_data[tx + stride];
+        }
+        __syncthreads();
+        stride /= 2;
+    }
+    output[blockIdx.x] = s_data[0];
+}
+
+float reduction(const float *input, int N) {
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    int current_size = N;
+    const float *current_input = input;
+    float *pivot_buffer = nullptr;
+    cudaMalloc(&pivot_buffer, sizeof(float) * blocksPerGrid);
+
+    while (current_size > 1) {
+        reduction_kernel<<<blocksPerGrid, threadsPerBlock>>>(current_input, pivot_buffer, current_size);
+        current_size = blocksPerGrid;
+        blocksPerGrid = (current_size + threadsPerBlock - 1) / threadsPerBlock;
+        current_input = pivot_buffer;
+    }
+
+    float ret = 0;
+    cudaMemcpy(&ret, current_input, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(pivot_buffer);
+    return ret;
 }
 
 __global__ void getmax_kernel(const float *input, float *output, int N) {
@@ -128,9 +167,115 @@ float getmax(const float *input, int N) {
 
     float ret = 0;
     cudaMemcpy(&ret, current_input, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(pivot_buffer);
     return ret;
 }
 
+__global__ void elementwise_divide(float *data, float divider, int N) {
+    int index = threadIdx.x + blockIdx.x * blockDim.x;
+    if (index < N) {
+        data[index] /= divider;
+    }
+}
+
+__global__ void softmax_kernel(const float* input, float* output, int N, float sum) {
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+    if (idx < N) {
+        output[idx] = input[idx] / sum;
+    } 
+}
+
+__global__ void elementwise_sub_and_exp_kernel(const float *input, float *output, float max, int N) {
+    int index = threadIdx.x + blockIdx.x * blockDim.x;
+    if (index < N)
+        output[index] = expf(input[index] - max);
+}
+
+void getmax(const float* input, float *pivot, float* output, int N, int threadsPerBlock) {
+    int current_size = N;
+    int blocksPerGrid = (current_size + threadsPerBlock - 1) / threadsPerBlock;
+    const float* current_input = input;
+
+    while (current_size > 1) {
+        getmax_kernel<<<blocksPerGrid, threadsPerBlock, threadsPerBlock * sizeof(float)>>>(current_input, pivot, current_size);
+        current_size = blocksPerGrid;
+        blocksPerGrid = (current_size + threadsPerBlock - 1) / threadsPerBlock;
+        current_input = pivot;
+    }
+
+    cudaMemcpy(output, current_input, sizeof(float), cudaMemcpyDeviceToHost);
+}
+
+void elementwise_sub_and_exp(const float *input, float *output, int N, int threadsPerBlock, float max) {
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    elementwise_sub_and_exp_kernel<<<blocksPerGrid, threadsPerBlock>>>(input, output, max, N);
+}
+
+float reduction(const float *input, float *pivot, int N, int threadsPerBlock) {
+    float ret = 0;
+    const float *current_input = input;
+
+    int current_size = N;
+    int blocksPerGrid = (current_size + threadsPerBlock - 1) / threadsPerBlock;
+
+    while (current_size > 1) {
+        reduction_kernel<<<blocksPerGrid, threadsPerBlock, threadsPerBlock * sizeof(float)>>>(current_input, pivot, current_size);
+        current_input = pivot;
+        current_size = blocksPerGrid;
+        blocksPerGrid = (current_size + threadsPerBlock - 1) / threadsPerBlock;
+    }
+
+    cudaMemcpy(&ret, current_input, sizeof(float), cudaMemcpyDeviceToHost);
+    return ret;
+}
+
+// input, output are device pointers (i.e. pointers to memory on the GPU)
+void softmax(const float *input, float *output, int N) {
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    float* pivot_buffer = nullptr;
+    cudaMalloc(&pivot_buffer, N * sizeof(float));
+
+    // printf("Input: "); debug_print_array(input, N);
+    float max_val = -FLT_MAX;
+    getmax(input, pivot_buffer, &max_val, N, threadsPerBlock);
+    cudaDeviceSynchronize();
+    // printf("Output: "); debug_print_array(pivot_buffer, N);
+    // printf("Max: %f\n", max_val);
+
+    elementwise_sub_and_exp(input, output, N, threadsPerBlock, max_val);
+
+    float sum = reduction(output, pivot_buffer, N, threadsPerBlock);
+
+    softmax_kernel<<<blocksPerGrid, threadsPerBlock>>>(output, output, N, sum);
+    cudaDeviceSynchronize();
+
+    cudaFree(pivot_buffer);
+}
+
 // Q, K, V, output are device pointers
-extern "C" void solve(const float* Q, const float* K, const float* V, float* output, int M, int N,
-                      int d) {}
+extern "C" void solve(const float* Q, const float* K, const float* V, float* output, int M, int N, int d) {
+    float *K_T = nullptr;
+    cudaMalloc(&K_T, N * d * sizeof(float));
+    transpose(K, K_T, N, d);
+
+    float *Q_K_T = nullptr;
+    cudaMalloc(&Q_K_T, M * N * sizeof(float));
+    matmul(Q, K_T, Q_K_T, M, N, d);
+
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    elementwise_divide<<<threadsPerBlock, blocksPerGrid>>>(Q_K_T, sqrtf(d), N);
+
+
+    float *smax = nullptr;
+    cudaMalloc(&smax, M * N * sizeof(float));
+    softmax(Q_K_T, smax, M * N);
+
+    matmul(smax, V, output, M, d, N);
+
+    cudaFree(smax);
+    cudaFree(Q_K_T);
+    cudaFree(K_T);
+}
